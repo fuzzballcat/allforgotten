@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>it's all forgotten now</title>
+    <link rel="icon" type="image/png" href="/allforgotten/favicon.png">
+    
+    <link rel="preload" href="/allforgotten/fonts/LucienSchoenschriftvCAT.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/allforgotten/fonts/LucienSchoenschriftvCAT.woff" as="font" type="font/woff" crossorigin>
+    <link rel="preload" href="/allforgotten/fonts/LucienSchoenschriftvCAT.ttf" as="font" type="font/ttf" crossorigin>
+    <style>
+      html, body {
+      	overflow: hidden;
+      	user-select: none;
+        padding: 0;
+        margin: 0;
+      }
+      
+      canvas {
+      	width: 100%; 
+      	height: 100%;
+      	padding: 0;
+      }
+
+      @font-face {
+        font-family: 'Lucien Schoenschriftv CAT';
+        src: url('/allforgotten/fonts/LucienSchoenschriftvCAT.woff2') format('woff2'),
+          url('/allforgotten/fonts/LucienSchoenschriftvCAT.woff') format('woff'),
+          url('/allforgotten/fonts/LucienSchoenschriftvCAT.ttf') format('truetype');
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      .disableTransition {
+        transition: none !important;
+      }
+
+      .titlecard {
+        position: absolute;
+        background-color: #000;
+        color: #fff;
+        width: 100vw;
+        height: 100vh;
+        text-align: center;
+        padding: 50vh 0vw;
+        font-family: "Lucien Schoenschriftv CAT";
+        font-size: 2em;
+        
+        transition: opacity 5s cubic-bezier(1, 0, 0.5, 0.5);
+      }
+
+      #brumpet {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        max-width: 40px;
+        max-height: 40px;
+        opacity: 0;
+      }
+      .normalBrumpetOpacity {
+        opacity: 0.4 !important;
+      }
+      .normalBrumpetOpacity:hover {
+        opacity: 0.7 !important;
+      }
+      .normalBrumpetOpacity:active {
+        opacity: 0.2 !important;
+      }
+
+      #swipe {
+        position: absolute;
+        left: calc(50vw - 60px);
+        top: calc(80vh - 60px);
+        max-width: 120px;
+        max-height: 120px;
+        opacity: 0;
+
+        transition: opacity 1s;
+      }
+
+      img {
+        user-drag: none;
+        user-select: none;
+      }
+
+      #skip {
+        position: absolute;
+        color: #fff;
+        font-family: "Lucien Schoenschriftv CAT";
+        font-size: 2em;
+        left: 10px;
+        bottom: 10px;
+        transition: opacity 1s;
+        opacity: 0;
+      }
+    </style>
+    <script type="module" crossorigin src="/allforgotten/assets/index-75921b28.js"></script>
+  </head>
+  <body>    
+    <div id="waitmsg" class="titlecard">We will be with you shortly.</div>
+    <div id="audioclick" class="titlecard" style="transition: opacity 1s">Please click at your convenience.</div>
+    <img draggable="false" src="/allforgotten/icons/brumpet.png" id="brumpet">
+    <img draggable="false" src="/allforgotten/icons/swipe.png" id="swipe">
+
+    <div id="skip">skip ></div>
+    
+    
+  </body>
+</html>
