@@ -26,7 +26,7 @@ dracoLoader.setDecoderPath( '/decoder/' );
 loader.setDRACOLoader( dracoLoader );
 const TOLOAD = ['table', 'chair', 'lamp', 'smalltable', 'radio', 'couch', 'hanglamp', 'bench', 'camera', 'shelves'];
 for(let to of TOLOAD){
-  loader.load( '/models/' + to + '.glb', function ( gltf ) {
+  loader.load( './models/' + to + '.glb', function ( gltf ) {
     gltf.scene.updateMatrixWorld( true );
   	OBJECTS[to] = gltf.scene;
   }, undefined, function ( error ) {
@@ -39,7 +39,7 @@ let audio_index = 0;
 let sound;
 
 function audio_to_src(audio){
-  return '/audio/' + audio + '_Verb.mp3';
+  return './audio/' + audio + '_Verb.mp3';
 }
 
 function play_audio(){
