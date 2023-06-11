@@ -379,8 +379,11 @@ function create_scene(){
       }
     });
   }
+  for(let l of lights){
+    l.dispose();
+  }
   
-  scenes = []; objects = []; planes = [];
+  scenes = []; objects = []; planes = []; lights = [];
 
   let rectangular_factor = Math.random() + 1;
   
