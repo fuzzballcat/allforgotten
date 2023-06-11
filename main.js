@@ -22,7 +22,7 @@ let LEVEL = 0;
 
 const loader = new GLTFLoader();
 const dracoLoader = new DRACOLoader();
-dracoLoader.setDecoderPath( '/decoder/' );
+dracoLoader.setDecoderPath( './decoder/' );
 loader.setDRACOLoader( dracoLoader );
 const TOLOAD = ['table', 'chair', 'lamp', 'smalltable', 'radio', 'couch', 'hanglamp', 'bench', 'camera', 'shelves'];
 for(let to of TOLOAD){
