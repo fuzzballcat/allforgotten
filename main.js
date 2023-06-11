@@ -511,10 +511,12 @@ function create_scene(){
   }
 }
 
+let camera_flipped = false;
 function setCamPosition(){
   const v = new THREE.Vector3(7, 0, 0);
   v.applyAxisAngle(new THREE.Vector3(0, 0, -1), camera_rot.y);
   v.applyAxisAngle(new THREE.Vector3(0, -1, 0), camera_rot.x);
+  camera.up.set(0, (camera_flipped ? -1 : 1), 0);
   camera.position.set(v.x, v.y, v.z);
   camera.lookAt(0, 0, 0);
 }
@@ -575,12 +577,19 @@ function setup(){
   document.body.addEventListener("pointermove", function(event) {
     {
       if(mouse.down && !wmsgopacity && IS_TUTORIAL != 1) {
-        camera_rot.x += (event.clientX - mouse.pos.x) / DRAG_SLOWNESS;
-        camera_rot.x %= Math.PI * 2;
+        camera_rot.x += (event.clientX - mouse.pos.x) / DRAG_SLOWNESS * (camera_flipped ? -1 : 1);
   
+        let prev = camera_rot.y;
         camera_rot.y += -(event.clientY - mouse.pos.y) / DRAG_SLOWNESS;
-        camera_rot.y = Math.min(camera_rot.y, Math.PI / 2);
-        camera_rot.y = Math.max(camera_rot.y, -Math.PI / 2);
+        for(let x = -2; x < 2; x ++){
+          if(Math.sign(Math.PI / 2 + Math.PI * x - prev) != Math.sign(Math.PI / 2 + Math.PI * x - camera_rot.y)){
+            camera_flipped = !camera_flipped;
+          }
+        }
+        /*camera_rot.y = Math.min(camera_rot.y, Math.PI / 2);
+        camera_rot.y = Math.max(camera_rot.y, -Math.PI / 2);*/
+        camera_rot.x %= Math.PI * 2;
+        camera_rot.y %= Math.PI * 2;
       }
     }
     
