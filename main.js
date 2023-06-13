@@ -565,7 +565,7 @@ function create_scene(){
     for(let i = 0; i < num_lights || !lights.length; i ++){
       for(let retry = 0; retry < 100; retry ++){
         let { pos: lightpos } = choose_position_on(ground_planes);
-        if(objects.find(o => o.bounding_box.containsPoint(lightpos))) { continue; }
+        if(lights.find(l => Math.sqrt(Math.pow(l.position.x - lightpos.x, 2) + Math.pow(l.position.z - lightpos.z, 2)) < 1) || objects.find(o => o.bounding_box.containsPoint(lightpos))) { continue; }
         lightpos.y = 0;
 
         new_light_at(lightpos);
@@ -810,7 +810,7 @@ function render() {
       continue;
     }
 
-    if(camera.position.distanceTo(lights[o.light].position) < 0.1){
+    if(camera_pos.distanceTo(camera_target) < 0.1 && camera.position.distanceTo(lights[o.light].position) < 0.1){
       let found = frustum.containsPoint(o.bounding_box.max.clone().add(o.bounding_box.min).divideScalar(2));
       
       if(found) o.death = 0.99;
