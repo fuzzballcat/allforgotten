@@ -521,8 +521,7 @@ function create_scene(){
     scenes[scenes.length - 1].add(eyearrow_sprite);
   } else {
     LEVEL++;
-    const flatness_factor = 0.8;
-    const probability_wall = 1 / (LEVEL + flatness_factor / (1 - flatness_factor)) + flatness_factor;
+    const probability_wall = 2 / LEVEL;
     
     let num_objects = Math.floor(Math.random() * 4) + 4;
     const choices = Object.keys(OBJECTS);
