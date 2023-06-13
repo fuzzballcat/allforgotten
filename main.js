@@ -268,6 +268,13 @@ updatePixelRatio();
 
 let objects = [], planes = [], lights = [], scenes = [];
 
+function generate_floorplan(){
+  let output = [];
+  output.push(new THREE.Vector2());
+
+  //for(let i = 0; i < Math.random())
+}
+
 function generate_room(RFACTOR){
   let return_planes = [];
   const material = new THREE.MeshBasicMaterial({ color: 0xaaaaaa });
@@ -595,7 +602,7 @@ function setCamPosition(){
   camera_pos.y += (camera_target.y - camera_pos.y) / 16;
 }
 
-const DRAG_SLOWNESS = 80;
+const DRAG_RESPONSIVITY = Math.PI * 4;
 
 const mouse = {
   pos: new THREE.Vector2(),
@@ -683,10 +690,10 @@ function setup(){
   document.body.addEventListener("pointermove", function(event) {
     {
       if(mouse.down && !wmsgopacity && waitmsg.innerText == "") {
-        camera_rot.x += (event.clientX - mouse.pos.x) / DRAG_SLOWNESS * (camera_flipped ? -1 : 1);
+        camera_rot.x += (event.clientX - mouse.pos.x) / window.innerWidth * DRAG_RESPONSIVITY * (camera_flipped ? -1 : 1);
   
         let prev = camera_rot.y;
-        camera_rot.y += -(event.clientY - mouse.pos.y) / DRAG_SLOWNESS;
+        camera_rot.y += -(event.clientY - mouse.pos.y) / window.innerHeight * DRAG_RESPONSIVITY;
         for(let x = -2; x < 2; x ++){
           if(Math.sign(Math.PI / 2 + Math.PI * x - prev) != Math.sign(Math.PI / 2 + Math.PI * x - camera_rot.y)){
             camera_flipped = !camera_flipped;
