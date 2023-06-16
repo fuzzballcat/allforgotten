@@ -12,6 +12,10 @@ import {
 } from 'three';
 
 
+function mod(n, d){
+  return ((n % d) + d) % d;
+}
+
 const SHADOWMAPSIZE = 512;
 
 let IS_TUTORIAL = 1;
@@ -33,6 +37,11 @@ for(let to of TOLOAD){
   	console.error( error );
   } );
 }
+
+const wallpaper = new THREE.TextureLoader().load('./wallpaper.png');
+wallpaper.wrapS = wallpaper.wrapT = THREE.RepeatWrapping;
+wallpaper.center.set(0.5, 0.5);
+
 
 const swipe_map = new THREE.TextureLoader().load('./icons/swipe.png');
 const swipe_material = new THREE.SpriteMaterial({ map: swipe_map });
@@ -268,49 +277,56 @@ updatePixelRatio();
 
 let objects = [], planes = [], lights = [], scenes = [];
 
-function generate_floorplan(){
-  let output = [];
-  output.push(new THREE.Vector2());
+const directions = [
+  new THREE.Vector3(1, 0, 0),
+  new THREE.Vector3(-1, 0, 0),
+  new THREE.Vector3(0, 0, 1),
+  new THREE.Vector3(0, 0, -1),
+  new THREE.Vector3(0, 1, 0),
+  new THREE.Vector3(0, -1, 0)
+];
 
-  //for(let i = 0; i < Math.random())
+function generate_floorplan(is_wall){
+  let output = [];
+  output.push(new THREE.Vector3());
+
+  const our_directions = is_wall ? directions : directions.slice(0, 4);
+
+  let extra_rooms = Math.floor(Math.random() * 5);
+  for(let i = 0; i < extra_rooms; i ++){
+    let choosable_rooms = output.map(o => 
+      [o, our_directions.filter(d => 
+        !output.find(other => other.equals(o.clone().add(d)))
+       )]
+    ).filter(o => o[1].length);
+
+    let choice = choosable_rooms[Math.floor(Math.random() * choosable_rooms.length)];
+
+    output.push(choice[0].clone().add(choice[1][Math.floor(Math.random() * choice[1].length)]));
+  }
+
+  return output;
 }
 
-function generate_room(RFACTOR){
+function generate_room(is_tutorial, is_wall){
+  let floorplan = is_tutorial ? [new THREE.Vector3()] : generate_floorplan(is_wall);
+
   let return_planes = [];
-  const material = new THREE.MeshBasicMaterial({ color: 0xaaaaaa });
+  const material = new THREE.MeshStandardMaterial({ map: wallpaper });//{ color: 0xaaaaaa });
 
-  let p1 = new THREE.Mesh(new THREE.PlaneGeometry(4 + RFACTOR, 3), material.clone());
-  p1.position.set( 0, 0, -2 );
-  return_planes.push(p1);
-
-  let p2 = new THREE.Mesh(new THREE.PlaneGeometry(4, 3), material.clone());
-  p2.position.set( -2 - RFACTOR/2, 0, 0 );
-  p2.rotateY(Math.PI / 2);
-  return_planes.push(p2);
-
-  let p3 = new THREE.Mesh(new THREE.PlaneGeometry(4, 4 + RFACTOR), material.clone());
-  p3.position.set( 0, -1.5, 0 );
-  p3.rotateZ(Math.PI / 2);
-  p3.rotateY(Math.PI / 2);
-  return_planes.push(p3);
-
-  let p1p = new THREE.Mesh(new THREE.PlaneGeometry(4 + RFACTOR, 3), material.clone());
-  p1p.position.set( 0, 0, 2 );
-  p1p.rotateY(Math.PI);
-  return_planes.push(p1p);
-
-  let p2p = new THREE.Mesh(new THREE.PlaneGeometry(4, 3), material.clone());
-  p2p.position.set( 2 + RFACTOR/2, 0, 0 );
-  p2p.rotateY(Math.PI / 2);
-  p2p.rotateY(Math.PI);
-  return_planes.push(p2p);
-
-  let p3p = new THREE.Mesh(new THREE.PlaneGeometry(4, 4 + RFACTOR), material.clone());
-  p3p.position.set( 0, 1.5, 0 );
-  p3p.rotateZ(Math.PI / 2);
-  p3p.rotateY(Math.PI / 2);
-  p3p.rotateY(Math.PI);
-  return_planes.push(p3p);
+  for(let room of floorplan){
+    for(let direction of directions){
+      let neighbor_room = floorplan.find(f => f.equals(room.clone().add(direction)));
+      if(!neighbor_room){
+        let p1 = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), material.clone());
+        p1.material.map.rotation = is_tutorial ? 0 : (Math.floor(Math.random() * 4) * Math.PI);
+        p1.material.needsUpdate = true;
+        p1.position.set( direction.x*2 + room.x * 4, direction.y*2 + room.y * 4, direction.z*2 + room.z * 4 );
+        p1.lookAt(room.x * 4, room.y * 4, room.z * 4);
+        return_planes.push(p1);
+      }
+    }
+  }
 
   return return_planes;
 }
@@ -378,6 +394,8 @@ function add_object(object){
 
   // shadow planes
   const smat = new THREE.ShadowMaterial();
+  smat.transparent = true;
+  smat.opacity = 0.9;
   object.shadowplanes = [];
   for(let plane of planes){
     const p = plane.clone();
@@ -394,30 +412,31 @@ function generate_beige(){
 }
 
 
-let camera_rot;
-
 function choose_position_on(planes){
   let chosen = planes[Math.floor(Math.random() * planes.length)];
   let boundingbox = new THREE.Box3().setFromObject(chosen);
   let pos = new THREE.Vector3(boundingbox.min.x + Math.random() * (boundingbox.max.x - boundingbox.min.x), boundingbox.min.y + Math.random() * (boundingbox.max.y - boundingbox.min.y), boundingbox.min.z + Math.random() * (boundingbox.max.z - boundingbox.min.z));
   let normal = planeFromPlane(chosen).normal;
-  return { pos, normal };
+  return { pos, normal, plane: chosen };
 }
 
-function new_light_at(lightpos){
-  const light = new THREE.PointLight( 0xffffff, 1 );
+function new_light_at(lightpos, num_lights){
+  const light = new THREE.PointLight( 0xffffff, 0.7 / num_lights );
   light.position.copy(lightpos);
   light.castShadow = true;
   light.shadow.mapSize.width = SHADOWMAPSIZE;
   light.shadow.mapSize.height = SHADOWMAPSIZE;
-  light.layers.set(1);
+  light.layers.enable(1);
   lights.push(light);
 }
 
 function create_scene(){
-  camera_rot = new THREE.Vector2(Math.PI * (IS_TUTORIAL == 2), 0);
+  camera_lookAt.set(IS_TUTORIAL == 2 ? 1 : -1, 0, 0);
   camera_pos.set(0, 0, 0);
   camera_target.copy(camera_pos);
+  camera_currentNormal.set(0, 1, 0);
+  camera_currentNormal_target.copy(camera_currentNormal);
+
   setCamPosition();
 
   for(let scene of scenes){
@@ -437,11 +456,11 @@ function create_scene(){
   
   objects = []; planes = []; lights = []; scenes = [];
 
-  let rectangular_factor = Math.random() + 1;
-  
+  let is_wall = LEVEL > 1;
+
   // backdrop room
   scenes.push(new THREE.Scene());
-  planes = generate_room(IS_TUTORIAL ? 0 : rectangular_factor);
+  planes = generate_room(IS_TUTORIAL, is_wall);
   for(let plane of planes){
     scenes[0].add(plane);
   }
@@ -451,12 +470,10 @@ function create_scene(){
     planeBoundaries.push(planeFromPlane(p));
   }
 
-  let ground_planes = planes.filter(p => p.position.y == -1.5);
-
   if(IS_TUTORIAL == 2){
     let object = {
       mesh: OBJECTS.chair,
-      position: new THREE.Vector3(-1, -1.5, ),
+      position: new THREE.Vector3(-1, -2, 0),
       yrot: 0,
       light: new THREE.Vector3(1, 0, 0),
       color: generate_beige(),
@@ -469,7 +486,7 @@ function create_scene(){
 
     let object2 = {
       mesh: OBJECTS.lamp,
-      position: new THREE.Vector3(0, -1.5, 1),
+      position: new THREE.Vector3(0, -2, 1),
       yrot: 0,
       light: new THREE.Vector3(0, 0, 1),
       color: generate_beige(),
@@ -480,18 +497,19 @@ function create_scene(){
     transform_object(object2);
     add_object(object2);
 
-    new_light_at(new THREE.Vector3(1, 0, -1));
-    new_light_at(new THREE.Vector3(1, 0, 1));
+    new_light_at(new THREE.Vector3(1, 0, -1), 2);
+    new_light_at(new THREE.Vector3(1, 0, 1), 2);
 
     seeing_sprite.scale.set(0.4, 0.3, 0.4);
     seeing_sprite.position.set(1.99, 0, 0);
     seeing_sprite.rotateY(Math.PI + Math.PI / 2);
     seeing_sprite.layers.set(2);
+    seeing_sprite.material.color = new THREE.Color(0.5, 0.5, 0.5, 0.2);
     scenes[scenes.length - 1].add(seeing_sprite);
   } else if(IS_TUTORIAL){
     let object = {
       mesh: OBJECTS.chair,
-      position: new THREE.Vector3(-1, -1.5, 0),
+      position: new THREE.Vector3(-1, -2, 0),
       yrot: 0,
       light: new THREE.Vector3(1, 0, 0),
       color: generate_beige(),
@@ -502,7 +520,7 @@ function create_scene(){
     transform_object(object);
     add_object(object);
 
-    new_light_at(new THREE.Vector3(0, 0, -1));
+    new_light_at(new THREE.Vector3(0, 0, -1), 1);
 
     swipe_sprite.position.set(-0.5, 0, 0);
     swipe_sprite.layers.set(2);
@@ -511,15 +529,15 @@ function create_scene(){
     swipe_sprite.material.opacity = 0.5;
     scenes[scenes.length - 1].add(swipe_sprite);
 
-    click_sprite.position.set(lights[0].position.x, -1, lights[0].position.z);
+    click_sprite.position.set(lights[0].position.x, -1.8, lights[0].position.z);
     click_sprite.layers.set(2);
     click_sprite.material.transparent = true;
     click_sprite.material.opacity = 0.5;
     scenes[scenes.length - 1].add(click_sprite);
 
-    eyearrow_sprite.position.set(lights[0].position.x, -1, lights[0].position.z);
+    eyearrow_sprite.position.set(lights[0].position.x, -1.95, lights[0].position.z);
     eyearrow_sprite.layers.set(2);
-    eyearrow_sprite.scale.set(0.3, 0.3, 0.3);
+    eyearrow_sprite.scale.set(0.6, 0.6, 0.6);
     eyearrow_sprite.rotateZ(Math.PI / 2);
     eyearrow_sprite.rotateY(Math.PI / 2);
     eyearrow_sprite.rotateZ(Math.PI / 4);
@@ -528,7 +546,6 @@ function create_scene(){
     scenes[scenes.length - 1].add(eyearrow_sprite);
   } else {
     LEVEL++;
-    const probability_wall = 2 / LEVEL;
     
     let num_objects = Math.floor(Math.random() * 4) + 4;
     const choices = Object.keys(OBJECTS);
@@ -539,7 +556,7 @@ function create_scene(){
       for(let retry = 0; retry < 100; retry ++){
         let choice = choices[Math.floor(Math.random() * choices.length)];
 
-        let { pos, normal } = choose_position_on((Math.random() > probability_wall) ? planes : ground_planes);
+        let { pos, normal } = choose_position_on(is_wall ? planes : planes.filter(p => p.position.y == -2));
 
         let object = {
           name: choice,
@@ -570,36 +587,53 @@ function create_scene(){
 
     for(let i = 0; i < num_lights || !lights.length; i ++){
       for(let retry = 0; retry < 100; retry ++){
-        let { pos: lightpos } = choose_position_on(ground_planes);
-        if(lights.find(l => Math.sqrt(Math.pow(l.position.x - lightpos.x, 2) + Math.pow(l.position.z - lightpos.z, 2)) < 1) || objects.find(o => o.bounding_box.containsPoint(lightpos))) { continue; }
-        lightpos.y = 0;
-
-        new_light_at(lightpos);
+        let { pos: lightpos, normal } = choose_position_on(is_wall ? planes : planes.filter(p => p.position.y == -2));
+        lightpos.add(normal.clone().multiplyScalar(2));
+        if(lights.find(l => l.position.distanceTo(lightpos) < 1) || objects.find(o => o.bounding_box.containsPoint(lightpos) || o.position.distanceTo(lightpos) < 2)) { continue; }
+        new_light_at(lightpos, num_lights);
         break;
       }
     }
   }
 }
 
-let camera_flipped = false;
-let camera_pos = new THREE.Vector2();
-let camera_target = new THREE.Vector2();
+let camera_pos = new THREE.Vector3();
+let camera_target = new THREE.Vector3();
+let camera_lookAt = new THREE.Vector3(0, 0, 1);
+let camera_currentNormal = new THREE.Vector3(0, 1, 0);
+let camera_currentNormal_target = new THREE.Vector3(0, 1, 0);
 let frustum = new THREE.Frustum();
 let projScreenMatrix = new THREE.Matrix4();
 
 function setCamPosition(){
-  const v = new THREE.Vector3(1, 0, 0);
-  v.applyAxisAngle(new THREE.Vector3(0, 0, -1), camera_rot.y);
-  v.applyAxisAngle(new THREE.Vector3(0, -1, 0), camera_rot.x);
-  camera.up.set(0, (camera_flipped ? -1 : 1), 0);
-  //camera.position.set(v.x, v.y, v.z);
+  camera.position.set(camera_pos.x, camera_pos.y, camera_pos.z);
+  camera.lookAt(camera_lookAt);
+  camera.up.copy(camera_currentNormal);
 
-  camera.position.set(0, 0, 0);
-  camera.lookAt(-v.x, -v.y, -v.z);
-  camera.position.set(camera_pos.x, 0, camera_pos.y);
+  const cvel = camera_target.clone().sub(camera_pos).divideScalar(20);
 
-  camera_pos.x += (camera_target.x - camera_pos.x) / 16;
-  camera_pos.y += (camera_target.y - camera_pos.y) / 16;
+  camera_pos.add(cvel);
+  camera_lookAt.add(cvel);
+
+  let target_mx = new THREE.Matrix4().lookAt(camera_currentNormal_target, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0));
+  let target_qt = new THREE.Quaternion().setFromRotationMatrix(target_mx);
+
+  let mx = new THREE.Matrix4().lookAt(camera_currentNormal, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0));
+  let qt = new THREE.Quaternion().setFromRotationMatrix(mx);
+  
+  qt.slerp(target_qt, 0.03);
+  let result = new THREE.Vector3(0, 0, 1);
+  result.applyQuaternion(qt);
+
+  camera_currentNormal.copy(result);
+}
+
+let last_plane = undefined;
+function set_camera_relrot(rotation){
+  let normalVector = new THREE.Vector3(0, 0, 1);
+  normalVector.applyEuler(rotation);
+
+  camera_currentNormal_target.copy(normalVector);
 }
 
 const DRAG_RESPONSIVITY = Math.PI * 4;
@@ -621,6 +655,13 @@ function end_skip(){
   skip.style.opacity = "0";
   setTimeout(() => { skip.style.display = "none"; }, 1000);
 }
+
+function coplanar(a, b){
+  return    a.position.x == b.position.x
+         || a.position.y == b.position.y
+         || a.position.z == b.position.z;
+}
+
 function setup(){
   waitmsg.style.opacity = "0";
   setTimeout(() => {
@@ -666,41 +707,53 @@ function setup(){
         - ( event.clientY / window.innerHeight ) * 2 + 1
       );
       raycaster.setFromCamera(pointer, camera);
+      raycaster.layers.disableAll();
+      raycaster.layers.enable(0);
       raycaster.layers.enable(2);
 
-      //let os = objects.map(o => o.mesh).concat(planes);
-      let ground_planes = planes.filter(p => Math.abs(p.position.y) == 1.5);
-      const intersects = raycaster.intersectObjects(ground_planes);
+      const intersects = raycaster.intersectObjects(planes);
 
-      if(intersects.length && ground_planes.includes(intersects[0].object)){
-        intersects[0].point.y = 0;
-        let lighttarget = lights.find(l => l.position.distanceTo(intersects[0].point) < 1);
+      if(intersects.length){
+        let normalVector = new THREE.Vector3(0, 0, 1);
+        normalVector.applyEuler(intersects[0].object.rotation);
+        let camera_to_point = intersects[0].point.clone().add(normalVector.multiplyScalar(2));
+
+        let lighttarget = lights.find(l => l.position.distanceTo(camera_to_point) < 1);
         if(lighttarget){
-          camera_target.x = lighttarget.position.x;
-          camera_target.y = lighttarget.position.z;
+          camera_target.copy(lighttarget.position);
 
-          if(IS_TUTORIAL == 1){ click_sprite.material.opacity = 0.4; }
+          if(IS_TUTORIAL == 1 && click_sprite.material.opacity > 0.4){ click_sprite.material.opacity = 0.4; }
         } else {
-          camera_target.x = intersects[0].point.x;
-          camera_target.y = intersects[0].point.z;
+          camera_target.copy(camera_to_point);
         }
+
+        set_camera_relrot(intersects[0].object.rotation);
       }
     }
   }, false);
   document.body.addEventListener("pointermove", function(event) {
     {
       if(mouse.down && !wmsgopacity && waitmsg.innerText == "") {
-        camera_rot.x += (event.clientX - mouse.pos.x) / window.innerWidth * DRAG_RESPONSIVITY * (camera_flipped ? -1 : 1);
+        let yrot = -(event.clientX - mouse.pos.x) / window.innerWidth * DRAG_RESPONSIVITY;
   
-        let prev = camera_rot.y;
-        camera_rot.y += -(event.clientY - mouse.pos.y) / window.innerHeight * DRAG_RESPONSIVITY;
-        for(let x = -2; x < 2; x ++){
-          if(Math.sign(Math.PI / 2 + Math.PI * x - prev) != Math.sign(Math.PI / 2 + Math.PI * x - camera_rot.y)){
-            camera_flipped = !camera_flipped;
-          }
-        }
-        camera_rot.x %= Math.PI * 2;
-        camera_rot.y %= Math.PI * 2;
+        let xrot = -(event.clientY - mouse.pos.y) / window.innerHeight * DRAG_RESPONSIVITY;
+        if(xrot > 0.1) xrot = 0.1;
+        if(xrot < -0.1) xrot = -0.1;
+
+        camera_lookAt.sub(camera_pos);
+
+        camera_lookAt.applyAxisAngle(camera_currentNormal, yrot);
+        let localX = new THREE.Vector3(1, 0, 0);
+        localX.applyQuaternion(camera.quaternion);
+
+        // normed = "prevent" gimbal lock
+        // todo: better
+        let dot = camera_lookAt.clone().normalize().dot(camera_currentNormal);
+        let normed = 1 - Math.abs(dot);
+        let normed_adjusted = 1 - Math.pow(1 - normed, 10);
+        camera_lookAt.applyAxisAngle(localX, xrot * ((Math.sign(dot) == Math.sign(xrot)) ? normed_adjusted : Math.min(normed_adjusted + 0.5, 1)));
+
+        camera_lookAt.add(camera_pos);
       }
     }
     
@@ -783,8 +836,10 @@ function render() {
     planenormal.applyQuaternion(plane.quaternion);
     const angle = camdirection.angleTo(planenormal);
 
-    plane.material.transparent = true;
-    plane.material.opacity = Math.max((angle - Math.PI / 2) / Math.PI * 2, 0);
+    const val = Math.max((angle - Math.PI / 2) / Math.PI * 2, 0);
+   /* plane.material.transparent = true;
+    plane.material.opacity = val*/
+    plane.material.color = new THREE.Color(val/2 + 0.2, val/2 + 0.2, val/2 + 0.2);
     plane.material.needsUpdate = true;
   }
 
@@ -837,7 +892,7 @@ function render() {
     if(click_sprite.material.opacity < 0.5){
       click_sprite.material.opacity += (0 - click_sprite.material.opacity) / 16;
       click_sprite.material.depthWrite = false;
-      eyearrow_sprite.material.opacity += (0.5 - eyearrow_sprite.material.opacity) / 16;
+      eyearrow_sprite.material.opacity += (0.8 - eyearrow_sprite.material.opacity) / 16;
     }
     click_sprite.material.needsUpdate = true;
     eyearrow_sprite.material.needsUpdate = true;
