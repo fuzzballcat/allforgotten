@@ -275,7 +275,7 @@ function updatePixelRatio(){
 }
 updatePixelRatio();
 
-let objects = [], planes = [], lights = [], scenes = [];
+let objects = [], planes = [], lights = [], scene = new THREE.Scene();
 
 const directions = [
   new THREE.Vector3(1, 0, 0),
@@ -353,12 +353,49 @@ function planeFromPlane(p){
 }
 
 function add_object(object){
-  scenes.push(new THREE.Scene());
-
   objects.push(object);
   
-  const mat = new THREE.MeshBasicMaterial({ color: object.color });
+ // const mat = new THREE.MeshBasicMaterial({ color: object.color });
+
   const threecol = new THREE.Color(object.color);
+  const uniforms = {
+    time: { type: 'f', value: 0 },
+    opacity: { type: 'f', value: 1 },
+    color: { type: 'vec3', value: [threecol.r, threecol.g, threecol.b] }
+  };
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms: uniforms,
+    vertexShader: /* glsl */`
+      uniform float time;
+      varying vec2 vUv;
+      float rand(vec3 co){
+        return fract(sin(dot(co, vec3(12.9898, 78.233, 32.542))) * 43758.5453);
+      }
+
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4( position.xy, position.z + (time == 0.0 ? 0.0 : 1.0) * (rand(position + time) - 0.5) / 5.0, 1.0 );
+      }
+    `,
+    fragmentShader: /* glsl */`
+    uniform float time;
+    uniform float opacity;
+    uniform vec3 color;
+    varying vec2 vUv;
+    float rand(vec2 co){
+      return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+    }
+
+    void main(){
+      float r = floor(rand(vec2(vUv.y, vUv.x + rand(vec2(time, time))) * time / 2.0) + 0.5);
+      float qualified = time == 0.0 ? 1.0 : r;
+      gl_FragColor = vec4(qualified * color, (qualified + 0.5) * opacity);
+    }
+    `
+  });
+  mat.transparent = true;
+ /* const threecol = new THREE.Color(object.color);
   mat.onBeforeCompile = function( shader ) {
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <output_fragment>',
@@ -368,7 +405,7 @@ function add_object(object){
       `
     )
   };
-  mat.side = THREE.DoubleSide;
+  mat.side = THREE.DoubleSide;*/
   object.mesh.traverse(n => { 
     if(n.isMesh) {
       n.material = mat.clone();
@@ -376,7 +413,7 @@ function add_object(object){
       n.layers.set(2);
     }
   });
-  scenes[scenes.length - 1].add(object.mesh);
+  scene.add(object.mesh);
 
   // shadow object [duplicate]
   const shadow_object = object.mesh.clone();
@@ -390,25 +427,12 @@ function add_object(object){
       n.layers.set(1);
     }
   });
-  scenes[scenes.length - 1].add(shadow_object);
-
-  // shadow planes
-  const smat = new THREE.ShadowMaterial();
-  smat.transparent = true;
-  smat.opacity = 0.9;
-  object.shadowplanes = [];
-  for(let plane of planes){
-    const p = plane.clone();
-    p.material = smat;
-    p.receiveShadow = true;
-    p.layers.set(1);
-    scenes[scenes.length - 1].add(p);
-    object.shadowplanes.push(p);
-  }
+  scene.add(shadow_object);
+  object.shadow_object = shadow_object;
 }
 
 function generate_beige(){
-  return 'hsl(' + (Math.random() * 100) + ', ' + (Math.random() * 20 + 20) + '%, 40%)'
+  return 'hsl(' + (Math.random() * 16 + 20) + ', ' + (Math.random() * 20 + 20) + '%, 60%)'
 }
 
 
@@ -428,6 +452,7 @@ function new_light_at(lightpos, num_lights){
   light.shadow.mapSize.height = SHADOWMAPSIZE;
   light.layers.enable(1);
   lights.push(light);
+  scene.add(light);
 }
 
 function create_scene(){
@@ -439,35 +464,41 @@ function create_scene(){
 
   setCamPosition();
 
-  for(let scene of scenes){
-    scene.traverse(o => {
-      if(o.isMesh){
-        o.geometry.dispose();
-        o.material.dispose();
-      }
-      if(typeof(o.dispose) == 'function'){
-        o.dispose();
-      }
-    });
-  }
-  for(let l of lights){
-    l.dispose();
-  }
+  scene.traverse(o => {
+    if(o.isMesh){
+      o.geometry.dispose();
+      o.material.dispose();
+    }
+    if(typeof(o.dispose) == 'function'){
+      o.dispose();
+    }
+  });
   
-  objects = []; planes = []; lights = []; scenes = [];
+  objects = []; planes = []; lights = []; scene = new THREE.Scene();
 
   let is_wall = LEVEL > 1;
 
   // backdrop room
-  scenes.push(new THREE.Scene());
   planes = generate_room(IS_TUTORIAL, is_wall);
   for(let plane of planes){
-    scenes[0].add(plane);
+    scene.add(plane);
   }
 
   let planeBoundaries = [];
   for(let p of planes){
     planeBoundaries.push(planeFromPlane(p));
+  }
+
+  // shadow planes
+  const smat = new THREE.ShadowMaterial();
+  smat.transparent = true;
+  smat.opacity = 0.9;
+  for(let plane of planes){
+    const p = plane.clone();
+    p.material = smat;
+    p.receiveShadow = true;
+    p.layers.set(1);
+    scene.add(p);
   }
 
   if(IS_TUTORIAL == 2){
@@ -505,7 +536,7 @@ function create_scene(){
     seeing_sprite.rotateY(Math.PI + Math.PI / 2);
     seeing_sprite.layers.set(2);
     seeing_sprite.material.color = new THREE.Color(0.5, 0.5, 0.5, 0.2);
-    scenes[scenes.length - 1].add(seeing_sprite);
+    scene.add(seeing_sprite);
   } else if(IS_TUTORIAL){
     let object = {
       mesh: OBJECTS.chair,
@@ -527,13 +558,13 @@ function create_scene(){
     swipe_sprite.scale.set(0.3, 0.3, 0.3);
     swipe_sprite.material.transparent = true;
     swipe_sprite.material.opacity = 0.5;
-    scenes[scenes.length - 1].add(swipe_sprite);
+    scene.add(swipe_sprite);
 
     click_sprite.position.set(lights[0].position.x, -1.8, lights[0].position.z);
     click_sprite.layers.set(2);
     click_sprite.material.transparent = true;
     click_sprite.material.opacity = 0.5;
-    scenes[scenes.length - 1].add(click_sprite);
+    scene.add(click_sprite);
 
     eyearrow_sprite.position.set(lights[0].position.x, -1.95, lights[0].position.z);
     eyearrow_sprite.layers.set(2);
@@ -543,20 +574,20 @@ function create_scene(){
     eyearrow_sprite.rotateZ(Math.PI / 4);
     eyearrow_sprite.material.transparent = true;
     eyearrow_sprite.material.opacity = 0;
-    scenes[scenes.length - 1].add(eyearrow_sprite);
+    scene.add(eyearrow_sprite);
   } else {
     LEVEL++;
     
     let num_objects = Math.floor(Math.random() * 4) + 4;
     const choices = Object.keys(OBJECTS);
     
-    let num_lights = 3 + Math.floor(Math.random());
-
     for(let i = 0; i < num_objects; i ++){
       for(let retry = 0; retry < 100; retry ++){
         let choice = choices[Math.floor(Math.random() * choices.length)];
 
-        let { pos, normal } = choose_position_on(is_wall ? planes : planes.filter(p => p.position.y == -2));
+        let { pos, normal, plane } = choose_position_on(is_wall ? planes : planes.filter(p => p.position.y == -2));
+
+        // object
 
         let object = {
           name: choice,
@@ -565,7 +596,8 @@ function create_scene(){
           yrot: Math.random() * Math.PI * 2,
           up: normal,
           color: generate_beige(),
-          light: Math.floor(Math.random() * num_lights)
+          light: i,
+          plane
         };
         transform_object(object);
         
@@ -581,16 +613,15 @@ function create_scene(){
 
         add_object(object);
 
-        break;
-      }
-    }
+        // light
+        for(let lretry = 0; lretry < 100; lretry ++){
+          let { pos: lightpos, normal } = choose_position_on([plane]);
+          lightpos.add(normal.clone().multiplyScalar(2));
+          if(lretry < 99 && (lights.find(l => l.position.distanceTo(lightpos) < 1) || objects.find(o => o.bounding_box.containsPoint(lightpos) || o.position.distanceTo(lightpos) < 2))) { continue; }
+          new_light_at(lightpos, num_objects);
+          break;
+        }
 
-    for(let i = 0; i < num_lights || !lights.length; i ++){
-      for(let retry = 0; retry < 100; retry ++){
-        let { pos: lightpos, normal } = choose_position_on(is_wall ? planes : planes.filter(p => p.position.y == -2));
-        lightpos.add(normal.clone().multiplyScalar(2));
-        if(lights.find(l => l.position.distanceTo(lightpos) < 1) || objects.find(o => o.bounding_box.containsPoint(lightpos) || o.position.distanceTo(lightpos) < 2)) { continue; }
-        new_light_at(lightpos, num_lights);
         break;
       }
     }
@@ -813,16 +844,7 @@ function render() {
   renderer.clear();
   for(let layer = 0; layer < 3; layer ++){
     camera.layers.set(layer);
-    for(let scene of scenes){
-      // memory shenanigans
-      for(let l of lights){
-        scene.add(l);
-      }
-      renderer.render(scene, camera);
-      for(let l of lights){
-        scene.remove(l);
-      }
-    }
+    renderer.render(scene, camera);
   }
 
   renderer.setRenderTarget(null);
@@ -849,26 +871,50 @@ function render() {
   frustum.setFromProjectionMatrix( projScreenMatrix );
 
   let alldeaths = true;
+  let oind = 0;
   for(let o of objects){
     if(!o.death || o.death > 0.05) { alldeaths = false; }
     
     if(o.death && o.death < 1){ 
       o.death += (0 - o.death) / 16;
 
-      for(let p of o.shadowplanes){
-        p.material.transparent = true;
-        p.material.opacity = o.death;
-      }
-
       o.mesh.traverse(n => { 
         if(n.isMesh) {
-          n.material.transparent = true;
-          n.material.opacity = o.death;
+          n.material.uniforms.opacity.value = o.death;
           n.material.depthWrite = false;
           n.material.needsUpdate = true;
         }
       });
+
+      if(o.death < 0.05 && !lights[oind].death){ lights[oind].death = 0.1; }
+
+      oind++;
       continue;
+    }
+
+    if(Math.random() < 0.001){
+      if(!o.static) o.static = 0;
+      o.static += 10;
+    }
+    if(o.static){
+      o.static --;
+      if(o.static < 0) o.static = 0;
+    }
+
+    if(o.static){
+      o.mesh.traverse(n => {
+        if(n.isMesh) {
+          n.material.uniforms.time.value += 0.05;
+          n.material.needsUpdate = true;
+        }
+      });
+    } else {
+      o.mesh.traverse(n => {
+        if(n.isMesh) {
+          n.material.uniforms.time.value = 0;
+          n.material.needsUpdate = true;
+        }
+      });
     }
 
     if(camera_pos.distanceTo(camera_target) < 0.1 && camera.position.distanceTo(lights[o.light].position) < 0.1){
@@ -879,6 +925,26 @@ function render() {
 
     let scalefactor = o.mesh.position.distanceTo(camera.position) / o.mesh.position.distanceTo(lights[o.light].position);
     o.mesh.scale.set(scalefactor, scalefactor, scalefactor);
+
+    oind ++;
+  }
+
+  for(let i = 0; i < lights.length; i ++){
+    if(lights[i].death){
+      if(lights[i].death <= 1) lights[i].death += 0.05;
+
+      if(lights[i].death > 1 || Math.sin(Math.pow(lights[i].death * Math.PI * 6, 2)) > 0.9){
+        lights[i].castShadow = false;
+        objects[i].shadow_object.traverse(n => {
+          if(n.isMesh) n.castShadow = false;
+        });
+      } else {
+        lights[i].castShadow = true;
+        objects[i].shadow_object.traverse(n => {
+          if(n.isMesh) n.castShadow = true;
+        });
+      }
+    }
   }
 
   if(IS_TUTORIAL == 1 && waitmsg.innerText == ""){
@@ -911,6 +977,7 @@ function render() {
     if(wmsgopacity > 0.99){
       if(FORCE_SKIP) { 
         IS_TUTORIAL = 0;
+        LEVEL = 2;
         FORCE_SKIP = false;
       }
       else if(IS_TUTORIAL == 1) {
