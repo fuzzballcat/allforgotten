@@ -38,26 +38,86 @@ for(let to of TOLOAD){
   } );
 }
 
-const wallpaper = new THREE.TextureLoader().load('./wallpaper.png');
+const tloader = new THREE.TextureLoader();
+
+const wallpaper = tloader.load('./textures/misc/wallpaper.png');
 wallpaper.wrapS = wallpaper.wrapT = THREE.RepeatWrapping;
 wallpaper.center.set(0.5, 0.5);
 
 
-const swipe_map = new THREE.TextureLoader().load('./icons/swipe.png');
+const swipe_map = tloader.load('./icons/swipe.png');
 const swipe_material = new THREE.SpriteMaterial({ map: swipe_map });
 const swipe_sprite = new THREE.Sprite( swipe_material );
 
-const click_map = new THREE.TextureLoader().load('./icons/click.png');
+const click_map = tloader.load('./icons/click.png');
 const click_material = new THREE.SpriteMaterial({ map: click_map });
 const click_sprite = new THREE.Sprite( click_material );
 
-const eyearrow_map = new THREE.TextureLoader().load('./icons/eye_arrow.png');
+const eyearrow_map = tloader.load('./icons/eye_arrow.png');
 const eyearrow_material = new THREE.MeshBasicMaterial({ map: eyearrow_map });
 const eyearrow_sprite = new THREE.Mesh( new THREE.PlaneGeometry(1, 1), eyearrow_material );
 
-const seeing_map = new THREE.TextureLoader().load('./seeing.png');
+const seeing_map = tloader.load('./textures/misc/seeing.png');
 const seeing_material = new THREE.MeshBasicMaterial({ map: seeing_map });
 const seeing_sprite = new THREE.Mesh( new THREE.PlaneGeometry(2, 2), seeing_material );
+
+const OBJECT_TEXTURE_MAP = {
+  "table": {
+    "Cylinder": "oldwood.png",
+    "Cylinder001": "oldwood.png",
+    "Cylinder002": "oldwood.png",
+    "Cylinder003": "oldwood.png",
+    "Cylinder004": "oldwood.png"
+  },
+  "chair": {
+    "Cylinder": "metal.png",
+    "Plane": "grungyfabric.png"
+  },
+  "lamp": {
+    "Sphere": "lampshade-2.jpeg",
+    "Cylinder": "metal.png",
+    "Cylinder006": "metal.png"
+  },
+  "smalltable": {
+    "Cube": "oldwood.png",
+    "Cylinder001": "oldwood.png",
+    "Cylinder006": "metal.png"
+  },
+  "radio": {
+    "Cube": "polishedwood.png",
+    "Cylinder001": "metal2.png",
+    "Cube001": "metal2.png",
+    "Cube002": "metal2.png",
+    "Cube004": "metal2.png"
+  },
+  "couch": {
+    "Cylinder001": "metal2.png",
+    "Plane001": "couchfabric.png"
+  },
+  "hanglamp": {
+    "Cylinder002": "lampshade.png",
+    "Cube": "metal.png",
+    "Cube001": "metal.png",
+    "Cylinder001": "metal.png",
+    "Cylidner003": "metal.png"
+  },
+  "bench": {
+    "Cube": "polishedwood.png",
+    "Cube001": "polishedwood.png"
+  },
+  "camera": {
+    "Cube": "metal.png",
+    "Cube001": "metal.png",
+    "Cylinder001": "metal2.png",
+    "Cylinder002": "metal2.png",
+    "Cube": "polishedwood.png"
+  },
+  "shelves": {
+    "Cube": "polishedwood.png",
+    "Cube002": "polishedwood.png",
+    "Cube001": "oldwood.png"
+  }
+}
 
 const AUDIOS = ["Body_and_Soul", "Dancing_In_The_Dark", "Home", "Im_In_Another World", "Intermezzo", "Its_All_Forgotten_Now", "Oh_You_Crazy_Moon", "Stardust", "The_Very_Thought_Of_You", "You_were_there", "Whispering", "Midnight_With_the_Stars_and_You"];
 let audio_index = 0;
@@ -101,7 +161,7 @@ const camera = new THREE.PerspectiveCamera(
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-//renderer.shadowMap.type = THREE.BasicShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.autoClear = false;
 document.body.appendChild(renderer.domElement);
 
@@ -361,7 +421,8 @@ function add_object(object){
   const uniforms = {
     time: { type: 'f', value: 0 },
     opacity: { type: 'f', value: 1 },
-    color: { type: 'vec3', value: [threecol.r, threecol.g, threecol.b] }
+    color: { type: 'vec3', value: [threecol.r, threecol.g, threecol.b] },
+    tex: { type: 't', value: 0 }
   };
 
   const mat = new THREE.ShaderMaterial({
@@ -382,6 +443,7 @@ function add_object(object){
     uniform float time;
     uniform float opacity;
     uniform vec3 color;
+    uniform sampler2D tex;
     varying vec2 vUv;
     float rand(vec2 co){
       return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
@@ -390,7 +452,7 @@ function add_object(object){
     void main(){
       float r = floor(rand(vec2(vUv.y, vUv.x + rand(vec2(time, time))) * time / 2.0) + 0.5);
       float qualified = time == 0.0 ? 1.0 : r;
-      gl_FragColor = vec4(qualified * color, (qualified + 0.5) * opacity);
+      gl_FragColor = vec4(qualified * texture2D(tex, vUv).rgb, (qualified + 0.5) * opacity);
     }
     `
   });
@@ -409,6 +471,12 @@ function add_object(object){
   object.mesh.traverse(n => { 
     if(n.isMesh) {
       n.material = mat.clone();
+      let texture = tloader.load("./textures/" + OBJECT_TEXTURE_MAP[object.name][n.name]);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.flipY = false;
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      n.material.uniforms.tex.value = texture;
+
       n.castShadow = false;
       n.layers.set(2);
     }
